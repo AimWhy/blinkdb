@@ -1,4 +1,5 @@
 import { BlinkKey, Table } from "../../core";
+import { Entity, PrimaryKeyOf } from "../../types";
 import { analyzeAnd } from "../analyze/and";
 import { analyzeWhere } from "../analyze/where";
 import { Or } from "../types";
@@ -11,10 +12,11 @@ import { selectForWhere } from "./where";
  *
  * @returns the selected items from the database, or `null` in case a full table scan is required.
  */
-export function selectForOr<T, P extends keyof T>(
+export function selectForOr<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
   table: Table<T, P>,
   or: Or<T>,
-  cb: SelectCallback<T>
+  cb: SelectCallback<T>,
+  from?: T[P]
 ): SelectResult<T> {
   if (or.OR.length === 0) {
     return { fullTableScan: false };
@@ -23,7 +25,9 @@ export function selectForOr<T, P extends keyof T>(
   // If any of the queries require a full table scan, do a full table scan
   for (const filter of or.OR) {
     const complexity =
-      "AND" in filter ? analyzeAnd(table, filter) : analyzeWhere(table, filter);
+      "AND" in filter
+        ? analyzeAnd(table, filter, from)
+        : analyzeWhere(table, filter, from);
     if (complexity === Number.MAX_SAFE_INTEGER) {
       table[BlinkKey].storage.primary.valuesArray().forEach((v) => cb(v));
       return { fullTableScan: true };
@@ -41,8 +45,8 @@ export function selectForOr<T, P extends keyof T>(
     };
     const result =
       "AND" in filter
-        ? selectForAnd(table, filter, childCb)
-        : selectForWhere(table, filter, childCb);
+        ? selectForAnd(table, filter, childCb, from)
+        : selectForWhere(table, filter, childCb, from);
     if (result.rowsScanned) {
       selectResult.rowsScanned!.push(...result.rowsScanned);
     }

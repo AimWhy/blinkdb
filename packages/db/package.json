@@ -1,15 +1,13 @@
 {
   "name": "blinkdb",
-  "version": "0.8.0",
+  "version": "0.14.0",
   "description": "A lightning fast, in-memory database for client-side JS",
   "main": "dist/index.js",
-  "module": "src/index.ts",
   "author": "",
   "license": "MIT",
   "scripts": {
     "build": "tsc --outDir ./dist",
-    "test": "jest",
-    "prepare": "npm run build"
+    "test": "jest"
   },
   "dependencies": {
     "fast-deep-equal": "^3.1.3",

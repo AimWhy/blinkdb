@@ -1,12 +1,14 @@
-import { OrdProps } from "../query/types";
-import { clone } from "./clone";
-import { BlinkKey } from "./createDB";
+import { middleware } from "../events/Middleware";
+import { Entity, PrimaryKeyOf } from "../types";
 import { Table } from "./createTable";
+import { internalUpdateMany } from "./updateMany";
 
 /**
  * Saves updates of the given `entity` in `table`.
  *
  * @throws if the entity has not been inserted into the table before, e.g. if the primary key of the entity was not found.
+ *
+ * @returns the primary key of the updated entity.
  *
  * @example
  * const db = createDB();
@@ -15,53 +17,26 @@ import { Table } from "./createTable";
  * // Increase the age of Alice
  * await update(userTable, { id: userId, age: 16 });
  */
-export async function update<T extends object, P extends keyof T>(
+export function update<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
   table: Table<T, P>,
   diff: Diff<T, P>
-): Promise<void> {
-  const primaryKeyProperty = table[BlinkKey].options.primary;
-  const primaryKey = diff[primaryKeyProperty] as T[P] & OrdProps;
-
-  if (primaryKey === undefined || primaryKey === null) {
-    throw new Error(`"${primaryKey}" is an invalid primary key value.`);
-  }
-
-  const item = table[BlinkKey].storage.primary.get(primaryKey);
-
-  if (item === undefined || item === null) {
-    throw new Error(`Item with primary key "${primaryKey}" not found.`);
-  }
-
-  const oldItem = clone(item);
-
-  let key: keyof Diff<T, P>;
-  for (key in diff) {
-    if (key !== primaryKeyProperty) {
-      item[key] = diff[key];
-      if (oldItem[key] !== item[key]) {
-        const btree = table[BlinkKey].storage.indexes[key as keyof T];
-        if (btree !== undefined) {
-          let oldIndexItems = btree.get(oldItem[key] as T[typeof key] & OrdProps)!;
-          const arrayIndex = oldIndexItems.indexOf(item);
-          // This condition is only false if clone is disabled and the user changed the indexed property without calling update
-          if (arrayIndex !== -1) {
-            oldIndexItems.splice(arrayIndex, 1);
-          }
-
-          const newIndexItems = btree.get(item[key] as T[typeof key] & OrdProps);
-          if (newIndexItems !== undefined) {
-            newIndexItems.push(item);
-          } else {
-            btree.set(item[key] as T[typeof key] & OrdProps, [item]);
-          }
-        }
-      }
-    }
-  }
-
-  table[BlinkKey].events.onUpdate.dispatch({ oldEntity: oldItem, newEntity: item });
+): Promise<T[P]> {
+  return Promise.resolve(
+    middleware<T, P, "update">(
+      table,
+      { action: "update", params: [table, diff] },
+      (table, diff) => internalUpdate(table, diff)
+    )
+  );
 }
 
-export type Diff<T extends object, P extends keyof T> = Partial<T> & {
-  [Key in P]-?: T[P];
+export function internalUpdate<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
+  table: Table<T, P>,
+  diff: Diff<T, P>
+): Promise<T[P]> {
+  return internalUpdateMany(table, [diff]).then((ids) => ids[0]);
+}
+
+export type Diff<T extends Entity<T>, P extends PrimaryKeyOf<T>> = Partial<T> & {
+  [Key in P]: T[P];
 };

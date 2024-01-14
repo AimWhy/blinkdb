@@ -1,8 +1,10 @@
+import { middleware } from "../events/Middleware";
 import { get } from "../query";
 import { Query } from "../query/types";
-import { clone } from "./clone";
+import { Entity, PrimaryKeyOf } from "../types";
 import { BlinkKey } from "./createDB";
 import { Table } from "./createTable";
+import { TableUtils } from "./table.utils";
 
 /**
  * Retrieve all entities from `table`.
@@ -12,7 +14,9 @@ import { Table } from "./createTable";
  * const userTable = createTable<User>(db, "users")();
  * const allUsers = await many(userTable);
  */
-export async function many<T, P extends keyof T>(table: Table<T, P>): Promise<T[]>;
+export async function many<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
+  table: Table<T, P>
+): Promise<T[]>;
 
 /**
  * Retrieve all entities from `table` that match the given `filter`.
@@ -33,21 +37,34 @@ export async function many<T, P extends keyof T>(table: Table<T, P>): Promise<T[
  *   }
  * });
  */
-export async function many<T, P extends keyof T>(
+export async function many<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
   table: Table<T, P>,
   query?: Query<T, P>
 ): Promise<T[]>;
 
-export async function many<T, P extends keyof T>(
+export function many<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
+  table: Table<T, P>,
+  query?: Query<T, P>
+): Promise<T[]> {
+  return Promise.resolve(
+    middleware<T, P, "many">(
+      table,
+      { action: "many", params: [table, query] },
+      (table, query) => internalMany(table, query)
+    )
+  );
+}
+
+export function internalMany<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
   table: Table<T, P>,
   query?: Query<T, P>
 ): Promise<T[]> {
   if (query === undefined) {
     const allItems = table[BlinkKey].storage.primary.valuesArray();
-    return table[BlinkKey].db[BlinkKey].options.clone ? clone(allItems) : allItems;
+    return Promise.resolve(TableUtils.cloneIfNecessary(table, allItems));
   }
 
   const items = get(table, query);
 
-  return table[BlinkKey].db[BlinkKey].options.clone ? clone(items) : items;
+  return Promise.resolve(TableUtils.cloneIfNecessary(table, items));
 }

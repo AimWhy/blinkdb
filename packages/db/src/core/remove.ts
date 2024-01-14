@@ -1,7 +1,7 @@
-import BTree from "sorted-btree";
-import { OrdProps } from "../query/types";
-import { BlinkKey } from "./createDB";
+import { middleware } from "../events/Middleware";
+import { Entity, PrimaryKeyOf } from "../types";
 import { Table } from "./createTable";
+import { internalRemoveMany } from "./removeMany";
 
 /**
  * Removes a given `entity` from the `table`.
@@ -15,36 +15,29 @@ import { Table } from "./createTable";
  * // Remove Alice from the table
  * await remove(userTable, { id: userId });
  */
-export async function remove<T, P extends keyof T>(
+export function remove<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
   table: Table<T, P>,
   entity: Ids<T, P>
 ): Promise<boolean> {
-  const primaryKeyProperty = table[BlinkKey].options.primary;
-  const primaryKey = entity[primaryKeyProperty] as T[P] & OrdProps;
-
-  const indexes = table[BlinkKey].storage.indexes;
-  if (Object.keys(indexes).length > 0) {
-    const item = table[BlinkKey].storage.primary.get(primaryKey);
-    if (!item) return false;
-    for (const property in indexes) {
-      const btree = indexes[property]!;
-      const key = item[property] as T[typeof property] & OrdProps;
-      if (key === null || key === undefined) continue;
-
-      const items = btree.get(key)!;
-      const deleteIndex = items.indexOf(item);
-      if (deleteIndex !== -1) {
-        if (items.length === 1) {
-          btree.delete(key);
-        } else {
-          items.splice(deleteIndex, 1);
-        }
-      }
-    }
-  }
-
-  table[BlinkKey].events.onRemove.dispatch({ entity: entity as unknown as T });
-  return table[BlinkKey].storage.primary.delete(primaryKey);
+  return Promise.resolve(
+    middleware<T, P, "remove">(
+      table,
+      { action: "remove", params: [table, entity] },
+      (table, entity) => internalRemove(table, entity)
+    )
+  );
 }
 
-export type Ids<T, P extends keyof T> = { [K in P]-?: T[P] };
+export function internalRemove<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
+  table: Table<T, P>,
+  entity: Ids<T, P>
+): Promise<boolean> {
+  return internalRemoveMany(table, [entity]).then((n) => n === 1);
+}
+
+/**
+ * Only primary key properties of T
+ */
+export type Ids<T extends Entity<T>, P extends PrimaryKeyOf<T>> = {
+  [K in P]: T[P];
+};

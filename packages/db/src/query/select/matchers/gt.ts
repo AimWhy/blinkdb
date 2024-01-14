@@ -1,13 +1,17 @@
 import BTree from "sorted-btree";
-import { GtMatcher, OrdProps } from "../../types";
+import { Ordinal } from "../../../types";
+import { getBiggerKey } from "../../compare";
+import { GtMatcher } from "../../types";
 import { SelectCallback } from "../types";
 
-export function selectForGt<K extends OrdProps, E>(
+export function selectForGt<K extends Ordinal, E>(
   btree: BTree<K, E>,
   matcher: GtMatcher<K>,
-  cb: SelectCallback<E>
+  cb: SelectCallback<E>,
+  from?: K
 ): void {
-  const minKey = matcher.gt;
+  let minKey = matcher.gt;
+  minKey = from ? getBiggerKey(minKey, from) : minKey;
   const maxKey = btree.maxKey();
   if (maxKey !== undefined) {
     btree.editRange(minKey, maxKey, true, (k, v) => {

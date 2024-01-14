@@ -1,0 +1,115 @@
+---
+import { CollectionEntry, getCollection } from 'astro:content';
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { components } from "../../components/md/index.astro";
+import ArrowLeftIcon from '../../components/icons/arrow-left-icon.astro';
+import ArrowRightIcon from '../../components/icons/arrow-right-icon.astro';
+import SidebarGroup from '../../components/sidebar-group.astro';
+import HeadingList from '../../components/heading-list.astro';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('docs');
+  return entries.map(entry => ({
+    params: { slug: entry.slug !== "index" ? entry.slug : undefined },
+    props: { entry, entries },
+  }));
+}
+
+export interface Props {
+  entry: CollectionEntry<"docs">;
+  entries: CollectionEntry<"docs">[];
+};
+
+const { entry, entries } = Astro.props;
+const { Content, headings } = await entry.render();
+
+const sortAccordingTo = <T extends CollectionEntry<'docs'>>(entries: T[], order: (T['slug'][])): T[] => {
+  const newEntries: T[] = [];
+  for(const slug of order) {
+    const entry = entries.find(e => e.slug === slug);
+    newEntries.push(entry);
+  }
+  return newEntries;
+}
+
+const entryWithOffset = <T extends CollectionEntry<'docs'>>(entries: T[], entry: T, offset: number): T|undefined => {
+  if(!entries.includes(entry)) return undefined;
+  const index = entries.findIndex(e => e.slug === entry.slug);
+  const newIndex = index + offset;
+  if(newIndex < 0 || newIndex >= entries.length) {
+    return undefined;
+  }
+  return entries[newIndex];
+}
+
+const guideEntries = sortAccordingTo(entries, [
+  "index",
+  "installation",
+  "tables",
+  "crud",
+  "filters",
+  "changes",
+  "middleware"
+]);
+
+const frameworkEntries = sortAccordingTo(entries, [
+  "react"
+]);
+
+const prevGuideEntry = entryWithOffset(guideEntries, entry, -1);
+const nextGuideEntry = entryWithOffset(guideEntries, entry, 1);
+---
+
+<DocsLayout bodyClassName="overflow-y-scroll" title={entry.data.title}>
+  <Fragment slot="links">
+    <SidebarGroup title="Getting started" href="/docs">
+      {guideEntries.map(e => (
+        <li class="p-0.5"><a href={`/docs/${e.slug !== "index" ? e.slug : ""}`}>{e.data.title}</a></li>
+      ))}
+    </SidebarGroup>
+    <SidebarGroup title="Frameworks">
+      {frameworkEntries.map(e => (
+        <li class="p-0.5"><a href={`/docs/${e.slug !== "index" ? e.slug : ""}`}>{e.data.title}</a></li>
+      ))}
+    </SidebarGroup>
+  </Fragment>
+
+  <div slot="sidebar-left" class="space-y-4">
+    <SidebarGroup title="Getting started" href="/docs">
+      {guideEntries.map(e => (
+        <li class="p-0.5"><a href={`/docs/${e.slug !== "index" ? e.slug : ""}`}>{e.data.title}</a></li>
+      ))}
+    </SidebarGroup>
+    <SidebarGroup title="Frameworks">
+      {frameworkEntries.map(e => (
+        <li class="p-0.5"><a href={`/docs/${e.slug !== "index" ? e.slug : ""}`}>{e.data.title}</a></li>
+      ))}
+    </SidebarGroup>
+  </div>
+
+  <div slot="sidebar-right">
+    <HeadingList headings={headings} />
+  </div>
+
+  <Content components={components} />
+  <div class="!my-20 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:divide-x-2 divide-gray-200 dark:divide-gray-800 font-semibold">
+    {prevGuideEntry && (
+      <a
+        class="sm:col-start-1 px-4 py-2 flex items-center gap-3"
+        href={`/docs/${prevGuideEntry.slug !== "index" ? prevGuideEntry.slug : ""}`}
+      >
+        <ArrowLeftIcon class="w-6 h-6 text-gray-500" />
+        <span class="mb-0.5 text-gray-800 dark:text-gray-50">{prevGuideEntry.data.title}</span>
+      </a>
+    )}
+    {nextGuideEntry && (
+      <a
+        class="sm:col-start-2 px-4 py-2 flex items-center gap-3 justify-end"
+        href={`/docs/${nextGuideEntry.slug !== "index" ? nextGuideEntry.slug : ""}`}
+      >
+        <span class="mb-0.5 text-gray-800 dark:text-gray-50">{nextGuideEntry.data.title}</span>
+        <ArrowRightIcon class="w-6 h-6 text-gray-500" />
+      </a>
+    )}
+  </div>
+</DocsLayout>

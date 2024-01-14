@@ -1,46 +1,76 @@
-import { insert } from "./insert";
-import { createDB, Database } from "./createDB";
-import { Table, createTable } from "./createTable";
+import { generateRandomUsers, User } from "../tests/utils";
+import { createDB } from "./createDB";
+import { createTable, Table } from "./createTable";
+import { insertMany } from "./insertMany";
 import { one } from "./one";
+import { use } from "./use";
+import { ItemNotFoundError, MoreThanOneItemFoundError } from "./errors";
 
-interface User {
-  id: number;
-}
-
-let db: Database;
+let users: User[];
 let userTable: Table<User, "id">;
 
 beforeEach(async () => {
-  db = createDB();
+  users = generateRandomUsers();
+  const db = createDB();
   userTable = createTable<User>(db, "users")();
-
-  await insert(userTable, { id: 0 });
-  await insert(userTable, { id: 1 });
-  await insert(userTable, { id: 2 });
+  await insertMany(userTable, users);
 });
 
-it("should throw if no items have been found", async () => {
-  expect(one(userTable, { where: { id: 5 } })).rejects.toThrow(/No items found/);
-});
+describe("with id", () => {
+  it("should throw if there is no match", async () => {
+    const fn = async () => await one(userTable, "1337");
 
-it("should throw if more than one item has been found", async () => {
-  expect(one(userTable, { where: { id: { gt: 0 } } })).rejects.toThrow(
-    /More than one item found/
-  );
-});
-
-it("should return the item if found", async () => {
-  expect(await one(userTable, { where: { id: 2 } })).toStrictEqual({ id: 2 });
-});
-
-it("should return the exact item if db.clone is set to false", async () => {
-  db = createDB({
-    clone: false,
+    await expect(fn).rejects.toThrow(ItemNotFoundError);
   });
-  userTable = createTable<User>(db, "users")();
-  const user = { id: 0 };
-  await insert(userTable, user);
-  const item = await one(userTable, { where: { id: 0 } });
 
-  expect(item).toBe(user);
+  it("should return the item if it finds a match", async () => {
+    const item = await one(userTable, "0");
+
+    expect(item).toStrictEqual(users.find((u) => u.id === "0"));
+  });
+
+  it("should clone returned items", async () => {
+    const item = await one(userTable, "0");
+
+    expect(item).not.toBe(users.find((u) => u.id === "0"));
+  });
+});
+
+describe("with filter", () => {
+  it("should throw if there is no match", async () => {
+    const fn = async () => await one(userTable, { where: { id: "1337" } });
+
+    await expect(fn).rejects.toThrow(ItemNotFoundError);
+  });
+
+  it("should throw if there's more than more match", async () => {
+    const fn = async () => await one(userTable, { where: { id: { gte: "" } } });
+
+    await expect(fn).rejects.toThrow(MoreThanOneItemFoundError);
+  });
+
+  it("should return the item if it finds a match", async () => {
+    const item = await one(userTable, { where: { id: "0" } });
+
+    expect(item).toStrictEqual(users.find((u) => u.id === "0"));
+  });
+
+  it("should clone returned items", async () => {
+    const item = await one(userTable, { where: { id: "0" } });
+
+    expect(item).not.toBe(users.find((u) => u.id === "0"));
+  });
+});
+
+it("should execute one hooks", async () => {
+  const fn = jest.fn();
+
+  use(userTable, (ctx) => {
+    fn(ctx.action);
+    return ctx.next(...ctx.params);
+  });
+  await one(userTable, { where: { id: "0" } });
+
+  expect(fn).toHaveBeenCalledTimes(1);
+  expect(fn).toHaveBeenCalledWith("one");
 });

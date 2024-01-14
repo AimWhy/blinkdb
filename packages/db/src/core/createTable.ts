@@ -1,13 +1,14 @@
 import BTree from "sorted-btree";
 import { Dispatcher } from "../events/Dispatcher";
-import { OrdProps } from "../query/types";
-import { Database, BlinkKey } from "./createDB";
+import { Hook } from "../events/types";
+import { Entity, Ordinal, PrimaryKeyOf, ValidEntity } from "../types";
+import { BlinkKey, Database } from "./createDB";
 
 /**
  * Creates a new table where entities can be inserted/updated/deleted/retrieved.
  *
  * The default primary key of a table is `id`. If your interface does not have
- * a `id` property or you'd like to change it to something else, use this snippet:
+ * a `id` property, or you'd like to change it to something else, use this snippet:
  *
  * ```
  * interface User {
@@ -32,18 +33,24 @@ import { Database, BlinkKey } from "./createDB";
  * const db = createDB();
  * const userTable = createTable<User>(db, "users")();
  */
-export function createTable<T extends { id: string | number }>(
+export function createTable<T extends { id: string | number } & Entity<T>>(
   db: Database,
   tableName: string
-): <P extends keyof T = "id">(options?: TableOptions<T, P>) => Table<T, P>;
+): <
+  P extends PrimaryKeyOf<T> & PrimaryKeyOf<ValidEntity<T>> = "id" &
+    PrimaryKeyOf<T> &
+    PrimaryKeyOf<ValidEntity<T>>
+>(
+  options?: TableOptions<T, P>
+) => Table<ValidEntity<T>, P>;
 
 /**
  * Creates a new table where entities can be inserted/updated/deleted/retrieved.
  *
- * The default primary key of a table is `id`. If your interface does not have
- * a `id` property or you'd like to change it to something else, use this snippet:
+ * The primary key of the table and other options are set
+ * with the `options` parameter.
  *
- * ```
+ * @example
  * interface User {
  *   uuid: string;
  *   name: string;
@@ -51,40 +58,39 @@ export function createTable<T extends { id: string | number }>(
  *
  * const db = createDB();
  * const userTable = createTable<User>(db, "users")({
- *   primary: "uuid" // whatever you want your primary key to be
+ *   primary: "uuid"
  * });
- * ```
- *
- * Other options can be supplied with the `options` parameter.
- *
- * @example
- * interface User {
- *   id: string;
- *   name: string;
- * }
- *
- * const db = createDB();
- * const userTable = createTable<User>(db, "users")();
  */
-export function createTable<T>(
+export function createTable<T extends Entity<T>>(
   db: Database,
   tableName: string
-): <P extends keyof T>(options: TableOptions<T, P>) => Table<T, P>;
+): <P extends PrimaryKeyOf<T> & PrimaryKeyOf<ValidEntity<T>>>(
+  options: TableOptions<T, P>
+) => Table<ValidEntity<T>, P>;
 
-export function createTable<T>(db: Database, tableName: string) {
-  return <P extends keyof T>(options?: TableOptions<T, P>): Table<T, P> => {
+export function createTable<T extends Entity<T>>(db: Database, tableName: string) {
+  return <P extends PrimaryKeyOf<T> & PrimaryKeyOf<ValidEntity<T>>>(
+    options?: TableOptions<T, P>
+  ): Table<ValidEntity<T>, P> => {
+    const primaryBTree = new BTree();
+    primaryBTree.totalItemSize = 0;
     return {
       [BlinkKey]: {
         db,
         tableName,
         storage: {
-          primary: new BTree(),
-          indexes: (options?.indexes ?? []).reduce<IndexStorage<T>>((prev, cur) => {
-            return {
-              ...prev,
-              [cur]: new BTree(),
-            };
-          }, {}),
+          primary: primaryBTree,
+          indexes: (options?.indexes ?? []).reduce<IndexStorage<ValidEntity<T>>>(
+            (prev, cur) => {
+              const btree = new BTree();
+              btree.totalItemSize = 0;
+              return {
+                ...prev,
+                [cur]: btree,
+              };
+            },
+            {}
+          ),
         },
         events: {
           onClear: new Dispatcher(),
@@ -92,6 +98,7 @@ export function createTable<T>(db: Database, tableName: string) {
           onRemove: new Dispatcher(),
           onUpdate: new Dispatcher(),
         },
+        hooks: [],
         options: {
           primary: options?.primary ?? ("id" as P),
           indexes: options?.indexes ?? [],
@@ -101,7 +108,7 @@ export function createTable<T>(db: Database, tableName: string) {
   };
 }
 
-export interface TableOptions<T, P extends keyof T> {
+export interface TableOptions<T extends Entity<T>, P extends PrimaryKeyOf<T>> {
   /**
    * The primary key of the entity.
    *
@@ -117,24 +124,25 @@ export interface TableOptions<T, P extends keyof T> {
   indexes?: Exclude<keyof T, P>[];
 }
 
-export interface Table<T, P extends keyof T> {
+export interface Table<T extends Entity<T>, P extends PrimaryKeyOf<T>> {
   [BlinkKey]: {
     db: Database;
     tableName: string;
     storage: {
-      primary: BTree<T[P] & OrdProps, T>;
+      primary: BTree<T[P], T>;
       indexes: IndexStorage<T>;
     };
     events: {
-      onInsert: Dispatcher<{ entity: T }>;
-      onUpdate: Dispatcher<{ oldEntity: T; newEntity: T }>;
-      onRemove: Dispatcher<{ entity: T }>;
+      onInsert: Dispatcher<{ entity: T }[]>;
+      onUpdate: Dispatcher<{ oldEntity: T; newEntity: T }[]>;
+      onRemove: Dispatcher<{ entity: T }[]>;
       onClear: Dispatcher;
     };
+    hooks: Hook<T, P>[];
     options: Required<TableOptions<T, P>>;
   };
 }
 
 type IndexStorage<T> = {
-  [Key in keyof T]?: BTree<T[Key] & OrdProps, T[]>;
+  [Key in keyof T]?: BTree<T[Key] & Ordinal, T[]>;
 };

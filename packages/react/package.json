@@ -1,0 +1,21 @@
+{
+  "name": "@blinkdb/react",
+  "version": "0.0.3",
+  "description": "Auxiliary package for BlinkDB & React",
+  "main": "dist/index.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc --outDir ./dist",
+    "test": "jest"
+  },
+  "peerDependencies": {
+    "blinkdb": "^0.14.0",
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^14.0.0",
+    "jest-environment-jsdom": "^29.5.0",
+    "react-test-renderer": "^18.2.0"
+  }
+}

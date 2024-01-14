@@ -1,0 +1,20 @@
+---
+title: "remove()"
+package: "blinkdb"
+---
+
+# remove()
+
+Removes a given entity from the table.
+
+```ts
+// Remove Alice from the table
+await remove(userTable, { id: "alice-uuid" });
+```
+
+| Parameter | Description                                                              |
+| --------- | ------------------------------------------------------------------------ |
+| `table`   | The table created by [`createTable()`](createtable) .                    |
+| `item`    | The item (or primary keys of an item) which gets removed from the table. |
+
+Consider [`removeMany()`](removemany) if you want to remove many items in parallel.

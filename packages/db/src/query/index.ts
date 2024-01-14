@@ -1,36 +1,66 @@
 import { BlinkKey, Table } from "../core";
+import { Entity, PrimaryKeyOf } from "../types";
 import { matches } from "./filter";
 import { limitItems } from "./limit";
 import { select } from "./select";
+import { SelectResult } from "./select/types";
 import { sortItems } from "./sort";
 import { Query } from "./types";
 
 /**
  * retrieve all items matching the given `filter`.
  */
-export function get<T, P extends keyof T>(table: Table<T, P>, filter: Query<T, P>): T[] {
+export function get<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
+  table: Table<T, P>,
+  filter: Query<T, P>
+): T[] {
+  let skipFromStep = false;
   let items: T[] = [];
+  let selectResult: SelectResult<T> | undefined;
 
+  // Retrieve items
   if (filter.where) {
-    // Retrieve items
-    select(table, filter.where, (item) => {
-      if (matches(item, filter.where!)) {
-        items.push(item);
-      }
-    });
+    selectResult = select(
+      table,
+      filter.where,
+      (item) => {
+        if (matches(item, filter.where!)) {
+          items.push(item);
+        }
+      },
+      filter.limit?.from
+    );
   } else {
-    // Retrieve all items
-    items = table[BlinkKey].storage.primary.valuesArray();
+    const btree = table[BlinkKey].storage.primary;
+    if (filter.limit?.from) {
+      const maxKey = btree.maxKey();
+      if (maxKey) {
+        btree.forRange(filter.limit.from, maxKey, true, (_, item) => {
+          items.push(item);
+        });
+        skipFromStep = true;
+      }
+      selectResult = {
+        rowsScanned: [table[BlinkKey].options.primary],
+        fullTableScan: false,
+      };
+    } else {
+      items = table[BlinkKey].storage.primary.valuesArray();
+      selectResult = {
+        rowsScanned: [table[BlinkKey].options.primary],
+        fullTableScan: false,
+      };
+    }
   }
 
+  // Sort items
   if (filter.sort) {
-    // Sort items
-    items = sortItems(items, filter.sort);
+    items = sortItems(table, items, filter.sort, selectResult);
   }
 
+  // Limit items
   if (filter.limit) {
-    // Limit items
-    items = limitItems(table, items, filter.limit);
+    items = limitItems(table, items, filter.limit, skipFromStep);
   }
 
   return items;

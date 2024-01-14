@@ -1,14 +1,16 @@
 import BTree from "sorted-btree";
-import { compare } from "../compare";
-import { AllMatchers, Matchers, OrdProps } from "../types";
+import { Ordinal } from "../../types";
+import { compare, getBiggerKey } from "../compare";
+import { AllMatchers } from "../types";
 
 /**
  * Returns the theoretical complexity of a given matcher,
  * e.g. how many items will need to be evaluated approximately.
  */
-export function analyzeMatcher<T extends OrdProps>(
+export function analyzeMatcher<T extends Ordinal>(
   btree: BTree<T, unknown>,
-  matcher: AllMatchers<T>
+  matcher: AllMatchers<T>,
+  from?: T
 ): number {
   if (typeof matcher !== "object" || matcher === null) {
     return 1; // Simple Equals matcher
@@ -19,19 +21,19 @@ export function analyzeMatcher<T extends OrdProps>(
       return matcher.in.length;
     } else if ("gt" in matcher) {
       const key = matcher.gt;
-      return analyzeGtMatcher(key, btree);
+      return analyzeGtMatcher(key, btree, from);
     } else if ("gte" in matcher) {
       const key = matcher.gte;
-      return analyzeGtMatcher(key, btree);
+      return analyzeGtMatcher(key, btree, from);
     } else if ("lt" in matcher) {
       const key = matcher.lt;
-      return analyzeLtMatcher(key, btree);
+      return analyzeLtMatcher(key, btree, from);
     } else if ("lte" in matcher) {
       const key = matcher.lte;
-      return analyzeLtMatcher(key, btree);
+      return analyzeLtMatcher(key, btree, from);
     } else if ("between" in matcher) {
       const keys = matcher.between;
-      return analyzeBetweenMatcher(keys[0], keys[1], btree);
+      return analyzeBetweenMatcher(keys[0], keys[1], btree, from);
     }
   }
 
@@ -41,7 +43,12 @@ export function analyzeMatcher<T extends OrdProps>(
 /**
  * returns the theoretical complexity of a gt/gte matcher.
  */
-function analyzeGtMatcher<K extends OrdProps>(key: K, btree: BTree<K, unknown>): number {
+function analyzeGtMatcher<K extends Ordinal>(
+  key: K,
+  btree: BTree<K, unknown>,
+  from?: K
+): number {
+  key = from ? getBiggerKey(key, from) : key;
   let num = 1;
   const rootKeys = btree["_root"].keys as K[];
   if (rootKeys.length === 0) return 0;
@@ -58,7 +65,12 @@ function analyzeGtMatcher<K extends OrdProps>(key: K, btree: BTree<K, unknown>):
 /**
  * returns the theoretical complexity of a lt/lte matcher.
  */
-function analyzeLtMatcher<K extends OrdProps>(key: K, btree: BTree<K, unknown>): number {
+function analyzeLtMatcher<K extends Ordinal>(
+  key: K,
+  btree: BTree<K, unknown>,
+  from?: K
+): number {
+  if (from) return analyzeBetweenMatcher(from, key, btree);
   let num = 1;
   const rootKeys = btree["_root"].keys as K[];
   if (rootKeys.length === 0) return 0;
@@ -75,11 +87,13 @@ function analyzeLtMatcher<K extends OrdProps>(key: K, btree: BTree<K, unknown>):
 /**
  * returns the theoretical complexity of a between matcher.
  */
-function analyzeBetweenMatcher<K extends OrdProps>(
+function analyzeBetweenMatcher<K extends Ordinal>(
   min: K,
   max: K,
-  btree: BTree<K, unknown>
+  btree: BTree<K, unknown>,
+  from?: K
 ): number {
+  min = from ? getBiggerKey(min, from) : min;
   let num = 1;
   const rootKeys = btree["_root"].keys as K[];
   if (rootKeys.length === 0) return 0;

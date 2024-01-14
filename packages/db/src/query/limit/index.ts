@@ -1,14 +1,16 @@
-import { Table, BlinkKey } from "../../core";
+import { BlinkKey, Table } from "../../core";
+import { Entity, PrimaryKeyOf } from "../../types";
 import { compare } from "../compare";
-import { Limit, OrdProps } from "../types";
+import { Limit } from "../types";
 
 /**
  * @returns all items from `items` limited according to the given `limit` object.
  */
-export function limitItems<T, P extends keyof T>(
+export function limitItems<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
   table: Table<T, P>,
   items: T[],
-  limit: Limit<T, P>
+  limit: Limit<T, P>,
+  skipFromStep = false
 ): T[] {
   if (items.length === 0) {
     return [];
@@ -18,9 +20,9 @@ export function limitItems<T, P extends keyof T>(
   let fromIndex = 0;
   let toIndex = items.length;
 
-  if (limit.from !== undefined) {
+  if (!skipFromStep && limit.from !== undefined) {
     fromIndex = items.findIndex(
-      (item) => compare(item[primaryKeyProperty] as OrdProps, limit.from as OrdProps) >= 0
+      (item) => compare(item[primaryKeyProperty], limit.from) >= 0
     );
   }
 

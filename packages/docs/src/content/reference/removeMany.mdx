@@ -1,0 +1,22 @@
+---
+title: "removeMany()"
+package: "blinkdb"
+---
+
+# removeMany()
+
+Removes multiple entities from the table.
+
+```ts
+// Remove Alice, Bob & Charlie from the table
+await removeMany(userTable, [
+  { id: "alice-uuid" },
+  { id: "bob-uuid" },
+  { id: "charlie-uuid" }
+]);
+```
+
+| Parameter | Description                                                               |
+| --------- | ------------------------------------------------------------------------- |
+| `table`   | The table created by [`createTable()`](createtable) .                     |
+| `items`    | The items (or primary keys of an item) which get removed from the table. |

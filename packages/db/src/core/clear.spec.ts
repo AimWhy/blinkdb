@@ -1,21 +1,37 @@
+import { generateRandomUsers, User } from "../tests/utils";
 import { clear } from "./clear";
-import { insert } from "./insert";
 import { createDB } from "./createDB";
+import { createTable, Table } from "./createTable";
+import { insertMany } from "./insertMany";
 import { many } from "./many";
-import { createTable } from "./createTable";
+import { use } from "./use";
 
-interface User {
-  id: number;
-}
+let users: User[];
+let userTable: Table<User, "id">;
+
+beforeEach(async () => {
+  users = generateRandomUsers();
+  const db = createDB();
+  userTable = createTable<User>(db, "users")();
+  await insertMany(userTable, users);
+});
 
 it("should clear the table", async () => {
-  const db = createDB();
-  const userTable = createTable<User>(db, "users")();
-  await insert(userTable, { id: 0 });
-  const previousItems = await many(userTable);
   await clear(userTable);
-  const nextItems = await many(userTable);
+  const items = await many(userTable);
 
-  expect(previousItems).toHaveLength(1);
-  expect(nextItems).toHaveLength(0);
+  expect(items).toHaveLength(0);
+});
+
+it("should execute clear hooks", async () => {
+  const fn = jest.fn();
+
+  use(userTable, (ctx) => {
+    fn(ctx.action);
+    return ctx.next(...ctx.params);
+  });
+  await clear(userTable);
+
+  expect(fn).toHaveBeenCalledTimes(1);
+  expect(fn).toHaveBeenCalledWith("clear");
 });

@@ -1,0 +1,132 @@
+---
+title: "use()"
+package: "blinkdb"
+---
+
+# use()
+
+Used for registering a hook - a function that is called whenever BlinkDB executes a certain action like inserting, updating or removing entities (See [Actions](#actions)).
+
+Typical usage of `use()` looks like this:
+
+```ts
+use(userTable, async (ctx) => {
+  // Call the next registered hook (or the implementation)
+  const result = await ctx.next(...ctx.params);
+  // Return results
+  return result;
+});
+```
+
+| Parameter | Description                                                                                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `obj`     | Either a table created by [`createTable()`](createtable) or an entire database created by [`createDB()`](createdb). See [Registering a hook](#registering-a-hook). |
+| `hook`    | A callback that will be executed whenever BlinkDB executes an action. See [Actions](#actions).                                                                     |
+
+## Registering a hook
+
+A hook can be registered on a table, and the corresponding callback will trigger whenever BlinkDB executes actions in that given table:
+
+```ts
+const stop = use(userTable, (ctx) => {
+  ...
+});
+```
+
+Alternatively, if you want the callback to run on actions on *any* table created with a database, you can register hooks on the database directly:
+
+```ts
+const stop = use(db, (ctx) => {
+  ...
+});
+```
+
+To remove a hook, call the function returned from `use()`.
+
+```ts
+const stop = use(db, ...); // Registers the hook
+stop(); // Removes the hook
+```
+
+## Call Order
+
+Registered hooks are called in the following order:
+
+1. All logic **before** `await ctx.next()` of hooks registered on the **database**.
+2. All logic **before** `await ctx.next()` of hooks registered on the **table**.
+3. All logic **after** `await ctx.next()` of hooks registered on the **table**.
+4. All logic **after** `await ctx.next()` of hooks registered on the **database**.
+
+Additionally, hooks themselves are called in the reverse order of when they were added. To clarify:
+
+```ts
+// Register a hook on the entire database
+use(db, async (ctx) => {
+  console.log("1");
+  const result = await ctx.next(...ctx.params);
+  console.log("6");
+  return result;
+});
+
+// Register a hook on the userTable
+use(userTable, async (ctx) => {
+  console.log("2");
+  const result = await ctx.next(...ctx.params);
+  console.log("5");
+  return result;
+});
+
+// Register a second hook on the userTable
+// - this will be called after the second hook
+use(userTable, async (ctx) => {
+  console.log("3");
+  const result = await ctx.next(...ctx.params);
+  console.log("4");
+  return result;
+});
+
+// Executing a action will then cause BlinkDB to call the hooks.
+// The following call to `insert` will log:
+// - 1
+// - 2
+// - 3
+// - 4
+// - 5
+// - 6
+await insert(userTable, someUser);
+```
+
+## Actions
+
+Most actions taken by BlinkDB will call middleware, and can therefore be modified, transformed, or canceled.
+All BlinkDB methods will, when called, execute all middleware registered under their name:
+
+```ts
+export type HookAction =
+  | "clear"
+  | "count"
+  | "first"
+  | "insert"
+  | "insertMany"
+  | "many"
+  | "one"
+  | "remove"
+  | "removeMany"
+  | "removeWhere"
+  | "update"
+  | "updateMany"
+  | "updateWhere";
+```
+
+The name of the method currently executing a hook can be retrieved with `ctx.action`, and checked with [`isAction()`](isaction).
+
+```ts
+use(userTable, async (ctx) => {
+  console.log(ctx.action);
+  const result = await ctx.next(...ctx.params);
+  return result;
+});
+
+// Will log `"insertMany"`.
+await insertMany(userTable, []);
+```

@@ -1,7 +1,8 @@
 import { Table } from "../../core";
+import { Entity, PrimaryKeyOf } from "../../types";
 import { analyzeOr } from "../analyze/or";
 import { analyzeWhere } from "../analyze/where";
-import { And, Or, Where } from "../types";
+import { And } from "../types";
 import { selectForOr } from "./or";
 import { SelectCallback, SelectResult } from "./types";
 import { selectForWhere } from "./where";
@@ -11,10 +12,11 @@ import { selectForWhere } from "./where";
  *
  * @returns the selected items from the database, or `null` in case a full table scan is required.
  */
-export function selectForAnd<T, P extends keyof T>(
+export function selectForAnd<T extends Entity<T>, P extends PrimaryKeyOf<T>>(
   table: Table<T, P>,
   and: And<T>,
-  cb: SelectCallback<T>
+  cb: SelectCallback<T>,
+  from?: T[P]
 ): SelectResult<T> {
   if (and.AND.length === 0) {
     return { fullTableScan: false };
@@ -25,7 +27,7 @@ export function selectForAnd<T, P extends keyof T>(
 
   for (const filter of and.AND) {
     const complexity =
-      "OR" in filter ? analyzeOr(table, filter) : analyzeWhere(table, filter);
+      "OR" in filter ? analyzeOr(table, filter, from) : analyzeWhere(table, filter, from);
     if (complexity < minComplexity) {
       minComplexity = complexity;
       bestFilter = filter;
@@ -33,6 +35,6 @@ export function selectForAnd<T, P extends keyof T>(
   }
 
   return "OR" in bestFilter
-    ? selectForOr(table, bestFilter, cb)
-    : selectForWhere(table, bestFilter, cb);
+    ? selectForOr(table, bestFilter, cb, from)
+    : selectForWhere(table, bestFilter, cb, from);
 }
